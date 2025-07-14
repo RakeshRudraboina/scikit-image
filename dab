@@ -1,0 +1,67 @@
+#@ File (label = "Input directory", style = "directory") input
+#@ File (label = "Output directory", style = "directory") output
+#@ String (label = "File suffix", value = ".tif") suffix
+
+// Start processing
+processFolder(input);
+
+// Recursively process folders and files
+function processFolder(dir) {
+    fileList = getFileList(dir);
+    fileList = Array.sort(fileList);
+    
+    for (i = 0; i < fileList.length; i++) {
+        path = dir + File.separator + fileList[i];
+        
+        if (File.isDirectory(path)) {
+            processFolder(path);  // Recurse into subfolder
+        } else if (endsWith(fileList[i], suffix)) {
+            processFile(dir, output, fileList[i]);  // Process image file
+        }
+    }
+}
+
+// Process a single image file
+function processFile(inputDir, outputDir, filename) {
+    // Ensure all previous windows are closed
+    run("Close All");
+
+    // Open the image
+    open(inputDir + File.separator + filename);
+
+    // Get base name without extension
+    title = getTitle();
+    dotIndex = title.lastIndexOf(".");
+    baseName = (dotIndex != -1) ? title.substring(0, dotIndex) : title;
+
+    // Convert color space and isolate the I channel
+    run("Color Transformer 2", "from=sRGB to=YIQ convert display");
+    selectWindow("I");
+    run("Duplicate...", "title=I_Channel");
+    close("I");
+
+    // Convert to 8-bit grayscale
+    selectWindow("I_Channel");
+    run("8-bit");
+    run("Apply LUT");
+
+    // Apply threshold and convert to binary mask
+    setAutoThreshold("Default dark");
+    setOption("BlackBackground", false);
+    run("Convert to Mask");
+
+    // Optional: morphological operation to enhance detection
+    run("Dilate");
+
+    // Analyze particles and save results
+    run("Analyze Particles...", "size=200-20000 display exclude overlay");
+    
+    // Save the results table
+    if (isOpen("Results")) {
+        saveAs("Results", outputDir + File.separator + baseName + ".csv");
+        close("Results");
+    }
+
+    // Final cleanup
+    run("Close All");
+}
